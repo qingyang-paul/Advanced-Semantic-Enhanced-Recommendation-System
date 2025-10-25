@@ -1,0 +1,37 @@
+paths:
+  # 训练数据路径
+  reviews_data_path: ../data/processed/train_reviews.json
+  # 测试数据路径
+  test_reviews_path: ../data/processed/test_reviews.json
+
+  # 用户和商户数据是共享的
+  users_data_path: ../data/unprocessed/yelp_academic_dataset_user.json
+  businesses_data_path: ../data/unprocessed/yelp_academic_dataset_business.json
+
+  # 未处理的review数据（处理后只保留restaurant类别）
+  unprocessed_reviews_path: data/unprocessed/yelp_academic_dataset_review.json
+
+  # --- 新增路径 ---
+  user_id_map_path: ../saved_models/user_id_map.pkl
+  business_id_map_path: ../saved_models/business_id_map.pkl
+
+  # 模型保存路径
+  best_model_path: ../saved_models/best_model.pt
+
+training:
+  batch_size: 1024
+  epochs: 10
+  learning_rate: 0.001
+
+model:
+  output_dim: 32 # 两个塔最终输出的向量维度
+
+  user_tower:
+    id_embedding_dim: 16
+    n_continuous_features: 2 # review_count, average_stars
+    hidden_layers: [64, 32] # MLP的隐藏层
+
+  item_tower:
+    id_embedding_dim: 16
+    n_continuous_features: 2 # stars, review_count
+    hidden_layers: [64, 32]
