@@ -20,7 +20,7 @@ def evaluate_model():
     """
     # 1. 加载配置
     try:
-        with open('../configs/config.yaml', 'r') as f:
+        with open('configs/config.yaml', 'r') as f:
             config = yaml.safe_load(f)
     except FileNotFoundError:
         print("错误: config.yaml 文件未找到。请确保你在项目的根目录下运行此脚本。")
@@ -28,10 +28,8 @@ def evaluate_model():
 
     # 读取统一数据映射
     try:
-        with open(config['paths']['user_id_map_path'], 'rb') as f:
-            user_id_map = pickle.load(f)  # user_id_map 现在是一个字典
-        with open(config['paths']['business_id_map_path'], 'rb') as f:
-            business_id_map = pickle.load(f) # business_id_map 也是一个字典
+        with open(config['paths']['category_map_path'], 'rb') as f:
+            category_map = pickle.load(f)
     except FileNotFoundError:
         print("错误: 找不到ID映射文件。请先运行 create_mappings.py。")
         return
@@ -41,9 +39,9 @@ def evaluate_model():
     if torch.cuda.is_available():
         device = torch.device('cuda')
         print("CUDA is available. Using GPU.")
-    elif torch.backends.mps.is_available():
-        device = torch.device('mps')
-        print("MPS is available. Using Apple Silicon GPU.")
+    # elif torch.backends.mps.is_available():
+    #     device = torch.device('mps')
+    #     print("MPS is available. Using Apple Silicon GPU.")
     else:
         device = torch.device('cpu')
         print("No GPU available. Using CPU.")
@@ -56,21 +54,13 @@ def evaluate_model():
     # 这里我们加载测试集数据，需要确保配置文件中有 test_data_path
 
     # 2. 加载数据
-    dataset = RecommendationDataset(
-        reviews_path=config['paths']['reviews_data_path'],
-        users_path=config['paths']['users_data_path'],
-        businesses_path=config['paths']['businesses_data_path'],
-        user_id_map=user_id_map,
-        business_id_map=business_id_map
-    )
-    
     try:
         test_dataset = RecommendationDataset(
             reviews_path=config['paths']['test_reviews_path'],
             users_path=config['paths']['users_data_path'],
             businesses_path=config['paths']['businesses_data_path'],
-            user_id_map=user_id_map,
-            business_id_map=business_id_map
+            category_map=category_map, 
+            max_categories=config['model']['item_tower']['max_categories']
         )
         test_loader = DataLoader(test_dataset, batch_size=config['training']['batch_size'], shuffle=False)
     except KeyError:
@@ -85,8 +75,6 @@ def evaluate_model():
     # 模型结构必须和训练时完全一致
 
     model = TwoTowerModel(
-        n_users=config['model']['n_users'],          # <-- 从配置读取
-        n_businesses=config['model']['n_businesses'],  # <-- 从配置读取
         config=config['model']
     )
 

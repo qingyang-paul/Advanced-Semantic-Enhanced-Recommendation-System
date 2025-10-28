@@ -17,10 +17,6 @@ def main():
 
     # 读取统一数据映射
     try:
-        with open(config['paths']['user_id_map_path'], 'rb') as f:
-            user_id_map = pickle.load(f)  # user_id_map 现在是一个字典
-        with open(config['paths']['business_id_map_path'], 'rb') as f:
-            business_id_map = pickle.load(f) # business_id_map 也是一个字典
         with open(config['paths']['category_map_path'], 'rb') as f:
             category_map = pickle.load(f)
     except FileNotFoundError:
