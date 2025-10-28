@@ -4,6 +4,7 @@ import pandas as pd
 import pickle
 from pathlib import Path
 import argparse
+import yaml  # 导入PyYAML
 
 def generate_mappings(args):
     """
@@ -13,6 +14,7 @@ def generate_mappings(args):
     input_path = Path(args.input_file)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    config_path = Path(args.config_file)
     
     user_map_path = output_dir / "user_id_map.pkl"
     business_map_path = output_dir / "business_id_map.pkl"
@@ -53,20 +55,48 @@ def generate_mappings(args):
         
     print("全局ID映射创建成功！")
 
+    # --- 新增：更新配置文件 ---
+    n_users = len(user_id_map)
+    n_businesses = len(business_id_map)
+    print(f"正在更新配置文件: {config_path}")
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            
+        # 在 model section 下更新或创建 n_users 和 n_businesses
+        if 'model' not in config:
+            config['model'] = {}
+        config['model']['n_users'] = n_users
+        config['model']['n_businesses'] = n_businesses
+        
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, sort_keys=False, indent=2) # indent参数让格式更美观
+        
+        print("配置文件更新成功！")
+    except FileNotFoundError:
+        print(f"错误: 配置文件 {config_path} 未找到。")
+    
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="从完整数据创建用户和商户的ID映射。")
     
     parser.add_argument(
         "--input_file",
         type=str,
-        default="../../data/processed/restaurant_reviews.json",
+        default="data/processed/restaurant_reviews.json",
         help="包含所有相关评论的JSON Lines文件。"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="../../saved_models", # Save mappings alongside the final model
+        default="saved_models", # Save mappings alongside the final model
         help="保存映射 (.pkl) 文件的目录。"
+    )
+    parser.add_argument(
+        "--config_file", 
+        type=str, 
+        default="configs/config.yaml", # 新增参数指向配置文件
+        help="需要更新的配置文件的路径"
     )
     
     args = parser.parse_args()
