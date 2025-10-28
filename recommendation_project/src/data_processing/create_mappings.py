@@ -24,8 +24,10 @@ def generate_mappings_and_update_config(args):
     reviews_df = pd.read_json(input_file_reviews, lines=True)
     users_cols_to_keep = ['user_id']
     reviews_df = reviews_df[users_cols_to_keep]
-    user_id_map = {id: i for i, id in enumerate(reviews_df['user_id'].unique())}
-    n_users = len(user_id_map)
+    unique_users = reviews_df['user_id'].unique()
+    # Reserve index 0 for padding/masking, 1 for unknown. Real users start at 2.
+    user_id_map = {uid: i + 2 for i, uid in enumerate(unique_users)}
+    n_users = len(user_id_map) + 2 # Add 2 to the count for the special tokens
     
     # --- Process Businesses and Categories (from business.json) ---
     print(f"Processing businesses and categories from {input_file_business}...")
@@ -33,8 +35,10 @@ def generate_mappings_and_update_config(args):
     business_cols_to_keep = ['business_id', 'categories']
     business_df = business_df[business_cols_to_keep]
     # Business Mapping
-    business_id_map = {id: i for i, id in enumerate(business_df['business_id'].unique())}
-    n_businesses = len(business_id_map)
+    unique_businesses = business_df['business_id'].unique()
+    # Reserve index 0 for padding/masking, 1 for unknown.
+    business_id_map = {bid: i + 2 for i, bid in enumerate(unique_businesses)}
+    n_businesses = len(business_id_map) + 2
     
     # Category Mapping
     # 1. Handle potential None values and split strings
