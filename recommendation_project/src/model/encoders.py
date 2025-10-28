@@ -1,70 +1,75 @@
-# src/model/encoders.py
+# src/model/encoders.py (V6 - Specialized Encoders)
 
 import torch
 import torch.nn as nn
 
-class FeatureEncoder(nn.Module):
+class UserEncoder(nn.Module):
     """
-    一个通用的特征编码器，用于处理用户或物品的特征。
-    它包含一个ID嵌入层和处理连续特征的全连接网络。
+    专门用于编码用户特征的模块。
+    它接收一系列连续的数值特征，并通过一个MLP来生成用户嵌入。
     """
-    def __init__(self, n_unique_ids, id_embedding_dim, n_continuous_features, output_dim, hidden_layers_dims):
-        """
-        Args:
-            n_unique_ids (int): 唯一ID的数量 (e.g., 用户数或商户数)。
-            id_embedding_dim (int): ID嵌入向量的维度。
-            n_continuous_features (int): 连续数值特征的数量。
-            output_dim (int): 编码器最终输出的向量维度。
-            hidden_layers_dims (list of int): MLP隐藏层的维度列表。
-        """
+    def __init__(self, n_continuous_features, hidden_layers_dims, output_dim):
         super().__init__()
         
-        # 1. ID嵌入层
-        self.id_embedding = nn.Embedding(n_unique_ids, id_embedding_dim)
+        # 构建MLP，输入维度就是所有连续特征的数量
+        layers = []
+        current_dim = n_continuous_features
+        for hidden_dim in hidden_layers_dims:
+            layers.append(nn.Linear(current_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(0.3)) # 添加Dropout以增强泛化能力
+            current_dim = hidden_dim
         
-        # 2. 用于融合所有特征的MLP
-        # MLP的输入维度 = ID嵌入维度 + 连续特征数
-        mlp_input_dim = id_embedding_dim + n_continuous_features
+        layers.append(nn.Linear(current_dim, output_dim))
+        self.mlp = nn.Sequential(*layers)
+
+    def forward(self, features):
+        # 将所有传入的连续特征张量拼接成一个向量
+        # features是一个字典，其值为形状为 [batch_size, 1] 的张量
+        continuous_vec = torch.cat(list(features.values()), dim=1)
+        
+        # 将拼接后的向量送入MLP
+        return self.mlp(continuous_vec)
+
+class BusinessEncoder(nn.Module):
+    """
+    专门用于编码商家特征的模块。
+    它分别处理连续特征和类别特征，然后将它们融合在一起。
+    """
+    def __init__(self, n_continuous_features, 
+                 n_categories, category_embedding_dim, 
+                 hidden_layers_dims, output_dim):
+        super().__init__()
+        
+        # 1. 类别特征的处理：EmbeddingBag
+        self.category_embedding_bag = nn.EmbeddingBag(
+            n_categories, category_embedding_dim, mode='mean', padding_idx=0
+        )
+        
+        # 2. 构建MLP，其输入维度是连续特征和类别嵌入的总和
+        mlp_input_dim = n_continuous_features + category_embedding_dim
         
         layers = []
         current_dim = mlp_input_dim
         for hidden_dim in hidden_layers_dims:
             layers.append(nn.Linear(current_dim, hidden_dim))
             layers.append(nn.ReLU())
+            layers.append(nn.Dropout(0.3))
             current_dim = hidden_dim
         
-        # 输出层
         layers.append(nn.Linear(current_dim, output_dim))
-        
         self.mlp = nn.Sequential(*layers)
 
     def forward(self, features):
-        """
-        前向传播。
-        
-        Args:
-            features (dict): 从Dataset传来的特征字典。
-                             必须包含 'id' 和其他连续特征。
-        
-        Returns:
-            torch.Tensor: 输出的编码向量。
-        """
-        # 提取ID嵌入向量
-        id_vec = self.id_embedding(features['id'])
-        
-        # 提取并拼接所有连续特征
-        # 注意: 我们假设连续特征已经是 (batch_size, 1) 的形状
-        continuous_features_list = []
-        for key, value in features.items():
-            if key != 'id':
-                continuous_features_list.append(value)
-        
+        # 提取连续特征并拼接
+        continuous_features_list = [v for k, v in features.items() if k != 'categories']
         continuous_vec = torch.cat(continuous_features_list, dim=1)
         
-        # 将ID嵌入向量和连续特征向量拼接
-        combined_vec = torch.cat([id_vec, continuous_vec], dim=1)
+        # 处理类别特征
+        category_vec = self.category_embedding_bag(features['categories'])
         
-        # 通过MLP进行融合
-        output = self.mlp(combined_vec)
+        # 将处理后的连续向量和类别向量拼接
+        combined_vec = torch.cat([continuous_vec, category_vec], dim=1)
         
-        return output
+        # 将最终的特征向量送入MLP
+        return self.mlp(combined_vec)

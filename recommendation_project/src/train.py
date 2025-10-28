@@ -21,6 +21,8 @@ def main():
             user_id_map = pickle.load(f)  # user_id_map 现在是一个字典
         with open(config['paths']['business_id_map_path'], 'rb') as f:
             business_id_map = pickle.load(f) # business_id_map 也是一个字典
+        with open(config['paths']['category_map_path'], 'rb') as f:
+            category_map = pickle.load(f)
     except FileNotFoundError:
         print("错误: 找不到ID映射文件。请先运行 create_mappings.py。")
         return
@@ -30,9 +32,9 @@ def main():
     if torch.cuda.is_available():
         device = torch.device('cuda')
         print("CUDA is available. Using GPU.")
-    elif torch.backends.mps.is_available():
-        device = torch.device('mps')
-        print("MPS is available. Using Apple Silicon GPU.")
+    # elif torch.backends.mps.is_available():
+    #     device = torch.device('mps')
+    #     print("MPS is available. Using Apple Silicon GPU.")
     else:
         device = torch.device('cpu')
         print("No GPU available. Using CPU.")
@@ -45,10 +47,12 @@ def main():
         reviews_path=config['paths']['reviews_data_path'],
         users_path=config['paths']['users_data_path'],
         businesses_path=config['paths']['businesses_data_path'],
-        user_id_map=user_id_map,
-        business_id_map=business_id_map
+        category_map=category_map, 
+        max_categories=config['model']['item_tower']['max_categories']
     )
 
+
+    
     # You can split it into train/val sets here if needed
     # For now, let's use the whole set for both for simplicity
     train_loader = DataLoader(dataset, batch_size=config['training']['batch_size'], shuffle=True)
@@ -57,8 +61,6 @@ def main():
     # 3. 初始化模型
     # 模型的具体参数也从配置中读取
     model = TwoTowerModel(
-        n_users=config['model']['n_users'],          # <-- 从配置读取
-        n_businesses=config['model']['n_businesses'],  # <-- 从配置读取
         config=config['model']
     )
 
