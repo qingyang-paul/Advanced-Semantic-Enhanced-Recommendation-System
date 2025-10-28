@@ -12,7 +12,7 @@ import pickle
 
 def main():
     # 1. 加载配置
-    with open('../configs/config.yaml', 'r') as f:
+    with open('configs/config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
     # 读取统一数据映射
@@ -57,8 +57,8 @@ def main():
     # 3. 初始化模型
     # 模型的具体参数也从配置中读取
     model = TwoTowerModel(
-        n_users=dataset.n_users,
-        n_businesses=dataset.n_businesses,
+        n_users=config['model']['n_users'],          # <-- 从配置读取
+        n_businesses=config['model']['n_businesses'],  # <-- 从配置读取
         config=config['model']
     )
 

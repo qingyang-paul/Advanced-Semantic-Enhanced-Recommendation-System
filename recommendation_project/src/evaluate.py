@@ -85,8 +85,8 @@ def evaluate_model():
     # 模型结构必须和训练时完全一致
 
     model = TwoTowerModel(
-        n_users=dataset.n_users,
-        n_businesses=dataset.n_businesses,
+        n_users=config['model']['n_users'],          # <-- 从配置读取
+        n_businesses=config['model']['n_businesses'],  # <-- 从配置读取
         config=config['model']
     )
 
