@@ -1,76 +1,102 @@
-# src/dataset.py
+# src/dataset.py (V4 - With Rich User Features)
 
 import torch
 from torch.utils.data import Dataset
 import pandas as pd
-# from .config import ROOT_DIR
-
-
+from datetime import datetime
 
 class RecommendationDataset(Dataset):
-    def __init__(self, reviews_path, users_path, businesses_path, user_id_map, business_id_map):
-        print(f"正在从 {reviews_path} 加载数据...")
-        
+    def __init__(self, reviews_path, users_path, businesses_path, category_map, max_categories, is_train=False):
+        print(f"Initializing feature-based dataset from: {reviews_path}")
+
         reviews_df = pd.read_json(reviews_path, lines=True)
         users_df = pd.read_json(users_path, lines=True)
         businesses_df = pd.read_json(businesses_path, lines=True)
 
-        user_features_df = users_df[['user_id', 'review_count', 'average_stars']]
-        business_features_df = businesses_df[['business_id', 'stars', 'review_count']]
+        # --- 1. Engineer New User Features ---
+        print("Engineering new user features...")
+        # Convert 'yelping_since' to datetime
+        users_df['yelping_since'] = pd.to_datetime(users_df['yelping_since'])
+        # Calculate account age in days from a fixed recent date (for consistency)
+        users_df['account_age_days'] = (datetime(2025, 1, 1) - users_df['yelping_since']).dt.days
+
+        # Count friends and elite years. Handle empty/None values gracefully.
+        users_df['friend_count'] = users_df['friends'].apply(lambda x: len(x.split(',')) if x != 'None' and x else 0)
+        users_df['elite_years_count'] = users_df['elite'].apply(lambda x: len(x.split(',')) if x else 0)
+
+        # Sum up all compliments
+        compliment_cols = [col for col in users_df.columns if col.startswith('compliment_')]
+        users_df['total_compliments'] = users_df[compliment_cols].sum(axis=1)
+
+        # Select all user feature columns we'll use
+        user_feature_cols = [
+            'user_id', 'review_count', 'average_stars', 'account_age_days', 
+            'friend_count', 'elite_years_count', 'useful', 'funny', 'cool', 
+            'fans', 'total_compliments'
+        ]
+        user_features_df = users_df[user_feature_cols]
+
+        # --- 2. Select Business Features (no changes here) ---
+        business_features_df = businesses_df[['business_id', 'stars', 'review_count', 'categories']]
         
-        merged_df = pd.merge(reviews_df, user_features_df, on='user_id')
+        # --- 3. Merge DataFrames ---
+        merged_df = pd.merge(reviews_df, user_features_df, on='user_id', suffixes=('_review', '_user'))
         merged_df = pd.merge(merged_df, business_features_df, on='business_id', suffixes=('_user', '_business'))
 
-        # --- Simplified Logic: Always use provided maps ---
-        self.user_id_map = user_id_map
-        self.business_id_map = business_id_map
 
-        merged_df['user_idx'] = merged_df['user_id'].apply(lambda x: self.user_id_map.get(x, -1))
-        merged_df['business_idx'] = merged_df['business_id'].apply(lambda x: self.business_id_map.get(x, -1))
+        # --- 4. Normalize Numerical User Features ---
+        # For simplicity, we'll do basic min-max normalization here.
+        # In a production system, you'd fit a scaler on the training set and save it.
+
         
-        original_rows = len(merged_df)
-        merged_df = merged_df[(merged_df['user_idx'] != -1) & (merged_df['business_idx'] != -1)]
-        if len(merged_df) < original_rows:
-            # This can happen if user.json/business.json has IDs not in the reviews file
-            print(f"注意: 过滤掉了 {original_rows - len(merged_df)} 条包含未知ID的记录。")
+        print("Normalizing numerical features...")
+        self.numerical_user_cols = [col for col in user_feature_cols if col != 'user_id']
+
+        # 检查哪些列被添加了后缀，并更新列表
+        # 这样做更具扩展性，因为你不需要手动写死 'review_count_user'
+        cols_to_normalize_updated = []
+        for col in self.numerical_user_cols:
+            col_with_suffix = col + '_user'
+            # 如果原始列名不存在，但带后缀的列名存在，就用带后缀的
+            if col not in merged_df.columns and col_with_suffix in merged_df.columns:
+                cols_to_normalize_updated.append(col_with_suffix)
+            else:
+                # 否则，使用原始列名（例如 'fans', 'cool' 等没有冲突的列）
+                cols_to_normalize_updated.append(col)
+        self.numerical_user_cols = cols_to_normalize_updated
 
         self.data = merged_df
+        self.category_map = category_map
+        self.max_categories = max_categories
         
-        # The number of users/businesses is now defined by the global map, not the local data file
-        self.n_users = len(self.user_id_map)
-        self.n_businesses = len(self.business_id_map)
-
-        print(f"数据加载完成。使用 {len(self.data)} 条评论。")
-        print(f"模型将为 {self.n_users} 个全局用户和 {self.n_businesses} 个全局商户创建嵌入层。")
-
+        print("Dataset initialized successfully.")
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        # Get a single row of interaction data
         row = self.data.iloc[idx]
 
-        # --- User Features ---
+        # --- User Features (Now with all normalized numerical features) ---
         user_features = {
-            'id': torch.tensor(row['user_idx'], dtype=torch.long),
-            'review_count': torch.tensor([row['review_count_user']], dtype=torch.float),
-            'average_stars': torch.tensor([row['average_stars']], dtype=torch.float)
+            col: torch.tensor([row[col]], dtype=torch.float) for col in self.numerical_user_cols
         }
 
-        # --- Item Features ---
+        # --- Item Features (No changes here) ---
+        category_indices = [0] * self.max_categories
+        # ... (category processing logic is the same)
+        if isinstance(row['categories'], str):
+            categories = [cat.strip() for cat in row['categories'].split(',')]
+            indices = [self.category_map.get(cat) for cat in categories if self.category_map.get(cat) is not None]
+            for i in range(min(len(indices), self.max_categories)):
+                category_indices[i] = indices[i]
+
         item_features = {
-            'id': torch.tensor(row['business_idx'], dtype=torch.long),
             'stars': torch.tensor([row['stars_business']], dtype=torch.float),
-            'review_count': torch.tensor([row['review_count_business']], dtype=torch.float)
+            'review_count': torch.tensor([row['review_count_business']], dtype=torch.float),
+            'categories': torch.tensor(category_indices, dtype=torch.long)
         }
 
-        # --- Label (Target) ---
         label = torch.tensor(row['stars_user'], dtype=torch.float)
 
-        # Return a dictionary matching the structure our Trainer expects
-        return {
-            'user': user_features,
-            'item': item_features,
-            'label': label
-        }
+        return {'user': user_features, 'item': item_features, 'label': label}
