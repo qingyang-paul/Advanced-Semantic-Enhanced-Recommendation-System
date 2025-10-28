@@ -16,7 +16,7 @@
 
 项目架构 (Architecture)
 本系统采用了一个先进的双塔模型（Two-Tower Model）架构，但其核心在于塔的构建和塔顶的交互方式。
-
+```
 +--------------------------+                                      +-----------------------------+
 |      用户原始特征         |                                      |      商家原始特征            |
 | (review_count, fans,     |                                      | (stars, review_count,      |
@@ -53,7 +53,7 @@
                                +-----------------------------+
                                |      最终预测评分 (1-5)      |
                                +-----------------------------+
-
+```
 用户塔 (User Tower): UserEncoder 接收一系列标准化的用户数值特征，通过一个多层感知机（MLP）网络，将其编码成一个低维稠密的“用户嵌入向量”。
 
 商家塔 (Item Tower): BusinessEncoder 分别处理商家的数值特征和类别（categories）特征。它使用 nn.EmbeddingBag 高效地将多个类别融合成一个向量，然后与数值特征拼接，再一同送入MLP，最终生成“商家嵌入向量”。
@@ -66,11 +66,10 @@
 1. 环境设置
 首先，克隆本项目，并使用附带的Python虚拟环境。
 
-Bash
-
+```Bash
 # 建议使用 Python 3.8+
-source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-
+source env/bin/activate  # On Windows, use `venv\Scripts\activate`
+```
 
 
 2. 数据准备
@@ -82,15 +81,18 @@ source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
 
 第1步 - 训练模型 执行主训练脚本。它会自动读取配置文件，加载训练数据，构建模型，并开始训练。训练过程中最好的模型将被保存在 saved_models/best_model.pt。
 
-Bash
-
+```Bash
 python src/train.py
+```
+
 第2步 - 评估模型 训练完成后，运行评估脚本。它会加载 best_model.pt 并在测试集上计算性能指标（如RMSE和MAE）。
 
-Bash
-
+```Bash
 python src/evaluate.py
+```
+
 文件结构
+```
 .
 ├── configs/
 │   └── config.yaml          # 驱动所有流程的核心配置文件
@@ -111,3 +113,4 @@ python src/evaluate.py
 │   ├── train.py             # 主训练脚本
 │   └── evaluate.py          # 主评估脚本
 └── README.md                # 本文件
+```
