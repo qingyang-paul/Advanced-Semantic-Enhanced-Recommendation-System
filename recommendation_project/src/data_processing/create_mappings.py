@@ -1,103 +1,76 @@
-# src/data_processing/create_mappings.py
+# src/data_processing/create_mappings.py (Updated Version)
 
 import pandas as pd
 import pickle
 from pathlib import Path
 import argparse
-import yaml  # 导入PyYAML
+import yaml
+from collections import Counter
 
-def generate_mappings(args):
+def generate_mappings_and_update_config(args):
     """
-    Reads the complete filtered reviews file and creates a unique integer mapping
-    for all users and businesses.
+    Creates global ID maps for users, businesses, and categories,
+    and updates the config file with their counts.
     """
-    input_path = Path(args.input_file)
+    # --- Setup Paths ---
+    input_file_reviews = Path(args.input_file_reviews)
+    input_file_business = Path(args.input_file_business)
     output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
     config_path = Path(args.config_file)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    user_map_path = output_dir / "user_id_map.pkl"
-    business_map_path = output_dir / "business_id_map.pkl"
-    
-    print("--- 开始创建全局ID映射 ---")
-    
-    try:
-        print(f"正在从 {input_path} 读取 'user_id' 和 'business_id' 列...")
-        # We only need the ID columns, which is more memory efficient
-        df_full = pd.read_json(input_path, lines=True)
-
-    except FileNotFoundError:
-        print(f"错误: 输入文件 {input_path} 未找到。")
-        print("请先运行 filter_restaurants.py 生成该文件。")
-        return
-
-    columns_to_keep = ['user_id', 'business_id']
-    df = df_full[columns_to_keep]
-
-    # Create mappings from unique IDs to integer indices
-    unique_users = df['user_id'].unique()
-    unique_businesses = df['business_id'].unique()
-    
-    user_id_map = {id: i for i, id in enumerate(unique_users)}
-    business_id_map = {id: i for i, id in enumerate(unique_businesses)}
-    
-    print(f"发现 {len(user_id_map)} 个独立用户。")
-    print(f"发现 {len(business_id_map)} 个独立商户。")
-    
-    # Save the mappings using pickle
-    print(f"正在保存用户ID映射到: {user_map_path}")
-    with open(user_map_path, 'wb') as f:
-        pickle.dump(user_id_map, f)
-        
-    print(f"正在保存商户ID映射到: {business_map_path}")
-    with open(business_map_path, 'wb') as f:
-        pickle.dump(business_id_map, f)
-        
-    print("全局ID映射创建成功！")
-
-    # --- 新增：更新配置文件 ---
+    # --- Process Users (from reviews) ---
+    print(f"Processing users from {input_file_reviews}...")
+    reviews_df = pd.read_json(input_file_reviews, lines=True)
+    users_cols_to_keep = ['user_id']
+    reviews_df = reviews_df[users_cols_to_keep]
+    user_id_map = {id: i for i, id in enumerate(reviews_df['user_id'].unique())}
     n_users = len(user_id_map)
-    n_businesses = len(business_id_map)
-    print(f"正在更新配置文件: {config_path}")
-    try:
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-            
-        # 在 model section 下更新或创建 n_users 和 n_businesses
-        if 'model' not in config:
-            config['model'] = {}
-        config['model']['n_users'] = n_users
-        config['model']['n_businesses'] = n_businesses
-        
-        with open(config_path, 'w') as f:
-            yaml.dump(config, f, sort_keys=False, indent=2) # indent参数让格式更美观
-        
-        print("配置文件更新成功！")
-    except FileNotFoundError:
-        print(f"错误: 配置文件 {config_path} 未找到。")
     
+    # --- Process Businesses and Categories (from business.json) ---
+    print(f"Processing businesses and categories from {input_file_business}...")
+    business_df = pd.read_json(input_file_business, lines=True)
+    business_cols_to_keep = ['business_id', 'categories']
+    business_df = business_df[business_cols_to_keep]
+    # Business Mapping
+    business_id_map = {id: i for i, id in enumerate(business_df['business_id'].unique())}
+    n_businesses = len(business_id_map)
+    
+    # Category Mapping
+    # 1. Handle potential None values and split strings
+    categories_series = business_df['categories'].dropna().str.split(', ')
+    # 2. Flatten the list of lists into a single list of all category occurrences
+    all_categories = [category for sublist in categories_series for category in sublist]
+    # 3. Find all unique categories
+    unique_categories = sorted(list(set(all_categories)))
+    # 4. Create the map. We reserve index 0 for padding.
+    category_map = {cat: i + 1 for i, cat in enumerate(unique_categories)}
+    n_categories = len(category_map) + 1 # +1 for the padding value at index 0
+    
+    print(f"Found {n_users} unique users.")
+    print(f"Found {n_businesses} unique businesses.")
+    print(f"Found {len(unique_categories)} unique categories.")
+
+    # --- Save Mappings ---
+    with open(output_dir / "user_id_map.pkl", 'wb') as f: pickle.dump(user_id_map, f)
+    with open(output_dir / "business_id_map.pkl", 'wb') as f: pickle.dump(business_id_map, f)
+    with open(output_dir / "category_map.pkl", 'wb') as f: pickle.dump(category_map, f)
+    print(f"Mappings saved to {output_dir}")
+
+    # --- Update Config File ---
+    print(f"Updating config file at {config_path}...")
+    with open(config_path, 'r') as f: config = yaml.safe_load(f)
+    config['model']['n_users'] = n_users
+    config['model']['n_businesses'] = n_businesses
+    config['model']['n_categories'] = n_categories
+    with open(config_path, 'w') as f: yaml.dump(config, f, sort_keys=False, indent=2)
+    print("Config file updated successfully.")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="从完整数据创建用户和商户的ID映射。")
-    
-    parser.add_argument(
-        "--input_file",
-        type=str,
-        default="data/processed/restaurant_reviews.json",
-        help="包含所有相关评论的JSON Lines文件。"
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="saved_models", # Save mappings alongside the final model
-        help="保存映射 (.pkl) 文件的目录。"
-    )
-    parser.add_argument(
-        "--config_file", 
-        type=str, 
-        default="configs/config.yaml", # 新增参数指向配置文件
-        help="需要更新的配置文件的路径"
-    )
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input_file_reviews", type=str, default="data/processed/restaurant_reviews.json")
+    parser.add_argument("--input_file_business", type=str, default="data/unprocessed/yelp_academic_dataset_business.json") # We need the business file now
+    parser.add_argument("--output_dir", type=str, default="saved_models")
+    parser.add_argument("--config_file", type=str, default="configs/config.yaml")
     args = parser.parse_args()
-    generate_mappings(args)
+    generate_mappings_and_update_config(args)
