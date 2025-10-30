@@ -16,13 +16,13 @@ model:
   output_dim: 32
   user_tower:
     id_embedding_dim: 16
-    n_continuous_features: 10
+    n_continuous_features: 20
     hidden_layers:
     - 64
     - 32
   item_tower:
     id_embedding_dim: 16
-    n_continuous_features: 2 # <-- THE ONLY CHANGE NEEDED!
+    n_continuous_features: 12 # <-- THE ONLY CHANGE NEEDED!
     hidden_layers:
     - 64
     - 32

@@ -13,6 +13,22 @@ class RecommendationDataset(Dataset):
         users_df = pd.read_json(users_path, lines=True)
         businesses_df = pd.read_json(businesses_path, lines=True)
 
+
+        # --- 新增：加载主题画像文件 ---
+        print("加载主题画像特征...")
+        user_themes_df = pd.read_json("data/processed/user_theme_profiles.json", orient='index')
+        business_themes_df = pd.read_json("data/processed/business_theme_profiles.json", orient='index')
+        
+        # --- 合并画像到主特征DataFrame ---
+        # 使用 left merge，对于没有画像的实体，其特征值将为NaN
+        users_df = pd.merge(users_df, user_themes_df, left_on='user_id', right_index=True, how='left')
+        businesses_df = pd.merge(businesses_df, business_themes_df, left_on='business_id', right_index=True, how='left')
+        
+        # 获取主题列的名称，并用0填充缺失值
+        self.theme_cols = list(user_themes_df.columns)
+        users_df[self.theme_cols] = users_df[self.theme_cols].fillna(0)
+        businesses_df[self.theme_cols] = businesses_df[self.theme_cols].fillna(0)
+
         # --- 1. Engineer New User Features ---
         print("Engineering new user features...")
         # Convert 'yelping_since' to datetime
@@ -82,6 +98,11 @@ class RecommendationDataset(Dataset):
             col: torch.tensor([row[col]], dtype=torch.float) for col in self.numerical_user_cols
         }
 
+        # 新增：添加主题特征
+        for col in self.theme_cols:
+            user_features[f"theme_{col}"] = torch.tensor([row[f"{col}_user"]], dtype=torch.float) # 注意后缀 _user
+
+
         # --- Item Features (No changes here) ---
         category_indices = [0] * self.max_categories
         # ... (category processing logic is the same)
@@ -97,6 +118,10 @@ class RecommendationDataset(Dataset):
             'categories': torch.tensor(category_indices, dtype=torch.long)
         }
 
+        # 新增：添加主题特征
+        for col in self.theme_cols:
+            item_features[f"theme_{col}"] = torch.tensor([row[f"{col}_business"]], dtype=torch.float) # 注意后缀 _business
+            
         label = torch.tensor(row['stars_user'], dtype=torch.float)
 
         return {'user': user_features, 'item': item_features, 'label': label}
