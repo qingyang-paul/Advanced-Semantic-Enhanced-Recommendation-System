@@ -1,0 +1,9 @@
+# API Credentials and Model Information
+# IMPORTANT: DO NOT commit this file to a public Git repository.
+# Add "configs/api_config.yaml" to your .gitignore file.
+
+openai:
+  api_key: "sk-YOUR_API_HERE" ##
+  base_url: "https://llmapi.paratera.com/v1/" # Or your proxy URL
+  model_id: "DeepSeek-V3.1" # A model that supports JSON mode is highly recommended
+

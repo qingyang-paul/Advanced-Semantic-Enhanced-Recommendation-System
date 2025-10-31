@@ -5,6 +5,9 @@ __pycache__/
 # Data files
 data/
 
+# Api files
+api_config.yaml
+
 # Saved models
 saved_models/
 
@@ -15,5 +18,5 @@ saved_models/
 # Notebook checkpoints
 .ipynb_checkpoints/
 
-# Mac 
+# Mac OS
 .DS_Store

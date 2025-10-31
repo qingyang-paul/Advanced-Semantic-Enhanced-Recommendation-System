@@ -5,76 +5,120 @@ from pathlib import Path
 import time
 from tqdm import tqdm
 import json
+import yaml  # Using PyYAML for config files
+import openai
 
-# --- 占位符：你需要自己实现的API调用函数 ---
-def call_llm_api(review_text: str) -> list:
-    """
-    调用你的大模型API。
-    
-    Args:
-        review_text: 评论的文本内容。
-        
-    Returns:
-        一个包含被识别出的主题名称的列表。
-        例如: ["产品与餐饮质量", "场所环境与氛围"]
-    """
-    # 这里是你的API调用逻辑
-    # ------------------------------------------
-    # 示例伪代码:
-    # prompt = f"从以下评论中识别出涉及的主题，主题列表为：[员工服务与态度, ...]。只返回识别出的主题名称。\n\n评论：{review_text}"
-    # response = your_api_client.chat.completions.create(model="gpt-4", messages=[...])
-    # identified_themes = parse_response(response) # 你需要解析API的返回结果
-    # return identified_themes
-    # ------------------------------------------
-    
-    # 临时返回一个模拟数据用于测试
-    import random
-    themes = ["产品与餐饮质量", "场所环境与氛围", "效率与速度", "价格与价值"]
-    return random.sample(themes, k=random.randint(1, 3))
+# --- 1. Load API Config from File (Your Request #1) ---
+try:
+    with open("configs/api_config.yaml", 'r') as f:
+        api_config = yaml.safe_load(f)['openai']
+    API_KEY = api_config.get("api_key")
+    BASE_URL = api_config.get("base_url")
+    MODEL_ID = api_config.get("model_id")
+except (FileNotFoundError, KeyError) as e:
+    raise ValueError(f"错误: 请创建并正确填写 configs/api_config.yaml 文件。 详情: {e}")
+
+if not all([API_KEY, BASE_URL, MODEL_ID]) or "YOUR_API_KEY_HERE" in API_KEY:
+    raise ValueError("请在 configs/api_config.yaml 中提供有效的 API 密钥、URL 和模型ID。")
+
+client = openai.OpenAI(api_key=API_KEY, base_url=BASE_URL)
+
+# --- (Prompt definition is the same) ---
+THEMES_LIST = [
+    "员工服务与态度", "产品与餐饮质量", "场所环境与氛围", "效率与速度", 
+    "问题解决与管理", "地理位置与便利性", "价格与价值", "餐饮/专业服务质量", 
+    "忠诚度与长期关系", "额外体验与设施"
+]
+SYSTEM_PROMPT = f"""
+你是一名专业的餐厅评论分析师。你的任务是仔细阅读一份用户评论，并从以下预定义的主题列表中，识别出评论中明确提及或强烈暗示的所有主题。
+# 预定义主题列表:
+{', '.join(THEMES_LIST)}
+# 输出要求:
+请严格按照以下JSON格式返回你的分析结果，不要添加任何额外的解释或文字。
+{{
+  "themes": ["识别出的主题1", "识别出的主题2", ...]
+}}
+"""
+
+def call_llm_api(review_text_chunk: str) -> list:
+    # (The API call function itself is mostly the same, but with improved error handling)
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_ID,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": review_text_chunk}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+            max_tokens=256
+        )
+        response_content = response.choices[0].message.content
+        result_json = json.loads(response_content)
+        identified_themes = result_json.get("themes", [])
+        return identified_themes if isinstance(identified_themes, list) else []
+    except Exception as e:
+        print(f"\nAPI 调用或解析时出错: {e}. 将返回空列表。")
+        return []
 
 
 def process_reviews_with_llm():
-    """
-    读取评论文件，逐条调用LLM API，并将结果保存。
-    """
     input_file = Path("data/processed/restaurant_reviews.json")
-    output_file = Path("data/processed/review_themes.jsonl") # 使用.jsonl扩展名
+    output_file = Path("data/processed/review_themes.jsonl")
     
-    print(f"正在从 {input_file} 读取评论...")
+    # --- 3. 实现断点续传 (Your Request #3) ---
+    processed_review_ids = set()
+    if output_file.exists():
+        print(f"发现已存在的输出文件: {output_file}。正在加载已处理的记录...")
+        with open(output_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    processed_review_ids.add(json.loads(line)['review_id'])
+                except json.JSONDecodeError:
+                    continue # Skip corrupted lines
+        print(f"已加载 {len(processed_review_ids)} 条已处理的评论ID。将从断点处继续。")
+    
     reviews_df = pd.read_json(input_file, lines=True)
     
-    # 使用tqdm来显示进度条
-    with open(output_file, 'w', encoding='utf-8') as f:
-        for index, row in tqdm(reviews_df.iterrows(), total=reviews_df.shape[0]):
-            review_text = row['text']
+    # 打开文件以追加模式 ('a')，这样就不会覆盖已有内容
+    with open(output_file, 'a', encoding='utf-8') as f:
+        # 使用tqdm包装DataFrame的迭代器
+        progress_bar = tqdm(reviews_df.iterrows(), total=reviews_df.shape[0], desc="分析评论主题")
+        for index, row in progress_bar:
             review_id = row['review_id']
-            user_id = row['user_id']
-            business_id = row['business_id']
             
-            try:
-                # 调用API
-                identified_themes = call_llm_api(review_text)
-                
-                # 构建结果字典
-                result = {
-                    "review_id": review_id,
-                    "user_id": user_id,
-                    "business_id": business_id,
-                    "themes": identified_themes
-                }
-                
-                # 将结果以JSON Lines格式写入文件
-                f.write(json.dumps(result, ensure_ascii=False) + '\n')
-                
-            except Exception as e:
-                print(f"处理 review_id {review_id} 时出错: {e}")
-            
-            # 实践中的建议：为了防止中途中断，可以每隔N条记录保存一次，
-            # 并在开始时检查输出文件，实现断点续传。
-            # 此外，API调用之间最好有短暂的延时以避免触发速率限制。
-            # time.sleep(0.5)
+            # 如果此ID已经处理过，则跳过
+            if review_id in processed_review_ids:
+                continue
 
-    print(f"处理完成！主题数据已保存至 {output_file}")
+            review_text = row.get('text', '')
+            if not isinstance(review_text, str) or not review_text.strip():
+                continue
+
+            # --- 2. 截断长文本并分块处理 (Your Request #2) ---
+            chunk_size = 2000  # 每个API请求处理的字符数
+            text_chunks = [review_text[i:i + chunk_size] for i in range(0, len(review_text), chunk_size)]
+            all_themes_for_review = set() # 使用set自动去重
+
+            for chunk in text_chunks:
+                identified_themes = call_llm_api(chunk)
+                all_themes_for_review.update(identified_themes)
+                # 在每个块之间稍微暂停，可以进一步降低API速率限制风险
+                time.sleep(0.01)
+
+            result = {
+                "review_id": review_id,
+                "user_id": row['user_id'],
+                "business_id": row['business_id'],
+                "themes": list(all_themes_for_review) # 将set转回list进行保存
+            }
+            
+            f.write(json.dumps(result, ensure_ascii=False) + '\n')
+            
+            # 更新进度条的描述
+            progress_bar.set_postfix({"Last ID": review_id[-5:]})
+
+    print(f"\n处理完成！主题数据已保存至 {output_file}")
 
 if __name__ == '__main__':
     process_reviews_with_llm()
