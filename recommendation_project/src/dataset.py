@@ -16,18 +16,19 @@ class RecommendationDataset(Dataset):
 
         # --- 新增：加载主题画像文件 ---
         print("加载主题画像特征...")
-        user_themes_df = pd.read_json("data/processed/user_theme_profiles.json", orient='index')
-        business_themes_df = pd.read_json("data/processed/business_theme_profiles.json", orient='index')
+        user_themes_df = pd.read_json("data/processed/user_theme_profiles.jsonl", lines=True)
+        business_themes_df = pd.read_json("data/processed/business_theme_profiles.jsonl", lines=True)
         
         # --- 合并画像到主特征DataFrame ---
         # 使用 left merge，对于没有画像的实体，其特征值将为NaN
-        users_df = pd.merge(users_df, user_themes_df, left_on='user_id', right_index=True, how='left')
-        businesses_df = pd.merge(businesses_df, business_themes_df, left_on='business_id', right_index=True, how='left')
-        
+        users_df = pd.merge(users_df, user_themes_df, on='user_id', how='left')
+        businesses_df = pd.merge(businesses_df, business_themes_df, on='business_id', how='left')  
+
         # 获取主题列的名称，并用0填充缺失值
-        self.theme_cols = list(user_themes_df.columns)
+        self.theme_cols = list(user_themes_df.columns.drop('user_id'))
         users_df[self.theme_cols] = users_df[self.theme_cols].fillna(0)
         businesses_df[self.theme_cols] = businesses_df[self.theme_cols].fillna(0)
+
 
         # --- 1. Engineer New User Features ---
         print("Engineering new user features...")
@@ -50,10 +51,15 @@ class RecommendationDataset(Dataset):
             'friend_count', 'elite_years_count', 'useful', 'funny', 'cool', 
             'fans', 'total_compliments'
         ]
+
+        # 动态地将主题列的名称添加到要选择的列列表中
+        user_feature_cols.extend(self.theme_cols)
+
         user_features_df = users_df[user_feature_cols]
 
         # --- 2. Select Business Features (no changes here) ---
-        business_features_df = businesses_df[['business_id', 'stars', 'review_count', 'categories']]
+        business_feature_cols = ['business_id', 'stars', 'review_count', 'categories'] + self.theme_cols        
+        business_features_df = businesses_df[business_feature_cols]
         
         # --- 3. Merge DataFrames ---
         merged_df = pd.merge(reviews_df, user_features_df, on='user_id', suffixes=('_review', '_user'))
@@ -87,6 +93,23 @@ class RecommendationDataset(Dataset):
         
         print("Dataset initialized successfully.")
 
+        num_numerical_user = len(self.numerical_user_cols)
+        # 注意：在 __getitem__ 中，原始数值特征和主题特征被合并了
+        # numerical_user_cols 已经包含了带 _user 后缀的原始数值特征和主题特征
+        print(f"📊 User Features (Total: {num_numerical_user})")
+        print(f"   - Example features: {self.numerical_user_cols[:3]} ...")
+
+
+        # 商家特征
+        # 连续特征：'stars', 'review_count' + 所有主题
+        num_continuous_item = 2 + len(self.theme_cols) 
+        print(f"\n🛍️ Item/Business Features")
+        print(f"   - Continuous Features (Total: {num_continuous_item})")
+        print(f"     - Base: ['stars_business', 'review_count_business']")
+        print(f"     - Themes: {len(self.theme_cols)} features (e.g., '{self.theme_cols[0]}_business')")
+        print(f"   - Categorical Features: 1 (processed into an embedding vector)")
+        print("="*50 + "\n")
+
     def __len__(self):
         return len(self.data)
 
@@ -97,10 +120,6 @@ class RecommendationDataset(Dataset):
         user_features = {
             col: torch.tensor([row[col]], dtype=torch.float) for col in self.numerical_user_cols
         }
-
-        # 新增：添加主题特征
-        for col in self.theme_cols:
-            user_features[f"theme_{col}"] = torch.tensor([row[f"{col}_user"]], dtype=torch.float) # 注意后缀 _user
 
 
         # --- Item Features (No changes here) ---

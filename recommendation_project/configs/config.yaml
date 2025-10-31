@@ -16,13 +16,13 @@ model:
   output_dim: 32
   user_tower:
     id_embedding_dim: 16
-    n_continuous_features: 20
+    n_continuous_features: 21
     hidden_layers:
     - 64
     - 32
   item_tower:
     id_embedding_dim: 16
-    n_continuous_features: 12 # <-- THE ONLY CHANGE NEEDED!
+    n_continuous_features: 13 # <-- THE ONLY CHANGE NEEDED!
     hidden_layers:
     - 64
     - 32
@@ -35,3 +35,9 @@ model:
   n_users: 144898
   n_businesses: 13037
   n_categories: 1103
+
+# 所有主题: [
+# '产品与餐饮质量', '价格与价值', '健康与安全', '员工服务与态度', 
+# '地理位置与便利性', '场所环境与氛围', '忠诚度与长期关系', '效率与速度', 
+# '问题解决与管理', '额外体验与设施', '餐饮/专业服务质量'
+# ]
