@@ -5,7 +5,8 @@ import torch
 import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+# 1. 在这里导入 r2_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from tqdm import tqdm
 import pickle
 
@@ -113,12 +114,17 @@ def evaluate_model():
     mse = mean_squared_error(all_labels, all_predictions)
     rmse = np.sqrt(mse)
     mae = mean_absolute_error(all_labels, all_predictions)
+    # 2. 在这里计算 r2_score
+    r2 = r2_score(all_labels, all_predictions)
 
     print("\n--- 评估结果 ---")
     print(f"均方根误差 (RMSE): {rmse:.4f}")
     print(f"平均绝对误差 (MAE): {mae:.4f}")
+    # 3. 在这里打印 r2_score
+    print(f"决定系数 (R-squared): {r2:.4f}")
     print("--------------------")
     print(f"提示: RMSE/MAE 的值越低，表示模型的预测越精准。")
+    print(f"提示: R² 的值越接近1，表示模型对数据方差的解释能力越强，但它并非推荐系统排序性能的最佳指标。")
 
 
 if __name__ == '__main__':
