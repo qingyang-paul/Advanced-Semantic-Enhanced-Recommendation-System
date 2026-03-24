@@ -1,126 +1,126 @@
-# 高级语义增强的餐厅推荐系统 (Advanced Semantic-Enhanced Recommendation System)
+# Advanced Semantic-Enhanced Restaurant Recommendation System
 
-本项目是一个基于 PyTorch 实现的、先进的深度学习推荐系统，旨在根据用户的多维度特征和商家的深层属性，精准预测用户对餐厅的评分。
+This project is an advanced deep learning recommendation system implemented in PyTorch, designed to accurately predict user ratings for restaurants based on multi-dimensional user features and deep business attributes.
 
-项目的核心创新在于，它不仅利用了传统的用户行为和商家属性，更通过**集成大语言模型（LLM）对海量评论文本进行主题分析，为用户和商家构建了深层的语义画像**。这种方法让模型能够理解评分背后“为什么”的原因，从而实现更高维度、更精准的个性化推荐。
+The core innovation of this project lies in its use of not only traditional user behavior and business attributes, but also **integrating large language models (LLMs) to perform topic analysis on large volumes of review text, building deep semantic profiles for both users and businesses**. This approach enables the model to understand the "why" behind ratings, achieving higher-dimensional and more precise personalized recommendations.
 
-## 核心思路与特性 (Core Philosophy & Features)
+## Core Philosophy & Features
 
-  * **深层语义理解 (Deep Semantic Understanding via LLM)**: 通过离线调用大语言模型，将非结构化的评论文本转化为结构化的“主题向量”。这为模型提供了关于服务、质量、氛围等方面的细粒度洞察，这是传统方法无法企及的。
-  * **纯粹基于特征 (Purely Feature-Based)**: 模型的预测能力完全来自于对用户和商家自身属性（包括语义画像）的学习，不依赖任何ID嵌入。
-  * **终极冷启动处理 (Ultimate Cold-Start Robustness)**: 由于不依赖ID，任何具备特征的新用户或新商家都能被模型立即处理并生成有意义的推荐，无需重新训练。
-  * **专用编码器 (Specialized Encoders)**: 为用户和商家分别设计了独立的编码器 (`UserEncoder` 和 `BusinessEncoder`)，允许对不同来源、不同性质的特征（数值型、类别型、语义型）进行专门的、非对称的处理和优化。
-  * **灵活的交互层 (Flexible Interaction Layer)**: 采用“拼接+MLP”的方式来融合用户和商家的最终向量，能够学习两者之间任意复杂的非线性关系。
-  * **配置驱动与模块化 (Config-Driven & Modular)**: 整个项目由 `configs/` 目录下的YAML文件驱动，架构清晰，模块解耦，易于扩展和维护。
+  * **Deep Semantic Understanding via LLM**: By calling large language models offline, unstructured review text is converted into structured "topic vectors". This provides the model with fine-grained insights into aspects such as service, quality, and atmosphere — something traditional methods cannot achieve.
+  * **Purely Feature-Based**: The model's predictive capability comes entirely from learning user and business attributes (including semantic profiles), with no reliance on any ID embeddings.
+  * **Ultimate Cold-Start Robustness**: Since no IDs are used, any new user or business with available features can be immediately processed by the model to generate meaningful recommendations, without retraining.
+  * **Specialized Encoders**: Independent encoders (`UserEncoder` and `BusinessEncoder`) are designed separately for users and businesses, allowing specialized, asymmetric processing and optimization of features from different sources and of different types (numerical, categorical, semantic).
+  * **Flexible Interaction Layer**: A "concatenation + MLP" approach is used to fuse the final vectors of users and businesses, capable of learning arbitrarily complex non-linear relationships between the two.
+  * **Config-Driven & Modular**: The entire project is driven by YAML files under the `configs/` directory, with a clean architecture, decoupled modules, and ease of extension and maintenance.
 
-## 项目架构 (Architecture)
+## Architecture
 
-系统架构在先进的双塔模型基础上，融入了强大的离线语义特征工程流程。
+The system architecture builds upon an advanced two-tower model, incorporating a powerful offline semantic feature engineering pipeline.
 
-![alt text](Structure.png)     
+![alt text](Structure.png)
 
-1.  **离线语义特征工程**: 这是整个流程的起点。
+1.  **Offline Semantic Feature Engineering**: This is the starting point of the entire pipeline.
 
-      * **主题生成**: `scripts/generate_review_themes.py` 脚本负责调用外部大语言模型（如OpenAI API），对每一条评论进行分析，提取出预定义的多个主题（如“员工服务与态度”、“产品与餐饮质量”等）。
-      * **画像聚合**: `src/data_processing/aggregate_themes.py` 脚本读取主题生成的结果，通过聚合计算，为**每个用户**生成一个“**主题偏好画像**”（该用户更关心什么），为**每个商家**生成一个“**主题声誉画像**”（该商家在哪方面被提及得更多）。
+      * **Topic Generation**: The `scripts/generate_review_themes.py` script calls an external large language model (e.g., OpenAI API) to analyze each review and extract a set of predefined topics (such as "Staff Service & Attitude", "Product & Food Quality", etc.).
+      * **Profile Aggregation**: The `src/data_processing/aggregate_themes.py` script reads the topic generation results and, through aggregation, generates a "**topic preference profile**" for **each user** (what the user cares about most) and a "**topic reputation profile**" for **each business** (which aspects are mentioned most often).
 
-2.  **用户塔 (User Tower)**: `UserEncoder` 接收两类特征：传统的用户数值特征（如粉丝数、账户年龄）和新生成的“主题偏好画像”向量。它通过一个MLP网络，将这些信息深度融合，生成最终的“用户嵌入向量”。
+2.  **User Tower**: `UserEncoder` receives two types of features: traditional numerical user features (such as follower count, account age) and the newly generated "topic preference profile" vector. It uses an MLP network to deeply fuse this information and produce the final "user embedding vector".
 
-3.  **商家塔 (Item Tower)**: `BusinessEncoder` 接收三类核心特征：商家的**原始数值特征**（如平均星级）、**类别特征**（如“墨西哥菜”，通过`EmbeddingBag`处理）和新生成的“**主题声誉画像**”向量。它同样通过一个MLP将这些不同来源的信息进行深度融合，生成“商家嵌入向量”。
+3.  **Item Tower**: `BusinessEncoder` receives three core types of features: the business's **raw numerical features** (e.g., average star rating), **categorical features** (e.g., "Mexican Food", processed via `EmbeddingBag`), and the newly generated "**topic reputation profile**" vector. It also uses an MLP to deeply fuse information from these different sources and produce the "business embedding vector".
 
-4.  **交互层 (Interaction Layer)**: 将用户和商家两个向量**拼接**起来，送入一个独立的MLP网络，学习复杂的交互模式并输出最终的预测评分。
+4.  **Interaction Layer**: The user and business vectors are **concatenated** and fed into an independent MLP network that learns complex interaction patterns and outputs the final predicted rating.
 
-## 如何使用 (Workflow)
+## Workflow
 
-请按照以下步骤来运行完整的项目流程。
+Please follow the steps below to run the complete project pipeline.
 
-### 1\. 环境设置
+### 1\. Environment Setup
 
 ```bash
-# 建议使用 Python 3.8+
+# Python 3.8+ is recommended
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# 安装所有依赖
+# Install all dependencies
 pip install -r requirements.txt
 ```
 
-### 2\. 配置 API
+### 2\. Configure the API
 
-为了生成语义特征，你需要配置大模型API。
+To generate semantic features, you need to configure a large model API.
 
-1.  复制 `configs/api_config.yaml.template` (如果提供) 或创建一个新文件 `configs/api_config.yaml`。
-2.  填入你的API密钥、Base URL和模型ID。
-3.  **重要**: 将 `configs/api_config.yaml` 添加到你的 `.gitignore` 文件中，**不要**将你的密钥提交到代码仓库。
+1.  Copy `configs/api_config.yaml.template` (if provided) or create a new file `configs/api_config.yaml`.
+2.  Fill in your API key, Base URL, and model ID.
+3.  **Important**: Add `configs/api_config.yaml` to your `.gitignore` file. **Do not** commit your keys to the repository.
 
-### 3\. 完整的处理与训练流程
+### 3\. Complete Processing & Training Pipeline
 
-在项目根目录下，按顺序执行以下命令：
+In the project root directory, execute the following commands in order:
 
-**第1步 - 基础数据预处理**
+**Step 1 - Basic Data Preprocessing**
 
-  * 筛选餐厅相关评论:
+  * Filter restaurant-related reviews:
     ```bash
     python src/data_processing/filter_restaurants.py
     ```
-  * 为商家类别创建全局映射:
+  * Create a global mapping for business categories:
     ```bash
     python src/data_processing/create_mappings.py
     ```
-  * 分割数据集为训练集和测试集:
+  * Split the dataset into training and test sets:
     ```bash
     python src/data_processing/split_dataset.py --test_size 0.2
     ```
 
-**第2步 - 生成高级语义特征 (耗时较长)**
+**Step 2 - Generate Advanced Semantic Features (time-consuming)**
 
-  * 调用LLM API为每条评论生成主题标签。此过程支持**断点续传**。
+  * Call the LLM API to generate topic labels for each review. This process supports **checkpoint resumption**.
     ```bash
     python scripts/generate_review_themes.py
     ```
-  * 聚合主题标签，为用户和商家创建主题画像。
+  * Aggregate topic labels to create topic profiles for users and businesses.
     ```bash
     python src/data_processing/aggregate_themes.py
     ```
 
-**第3步 - 训练模型**
-执行主训练脚本。它会自动加载所有处理好的特征（包括语义画像），构建模型并开始训练。
+**Step 3 - Train the Model**
+Run the main training script. It will automatically load all processed features (including semantic profiles), build the model, and start training.
 
 ```bash
 python src/train.py
 ```
 
-**第4步 - 评估模型**
-训练完成后，运行评估脚本，检验模型在测试集上的性能。
+**Step 4 - Evaluate the Model**
+After training, run the evaluation script to assess the model's performance on the test set.
 
 ```bash
 python src/evaluate.py
 ```
 
-## 文件结构
+## File Structure
 
 ```
 .
 ├── configs/
-│   ├── api_config.yaml      # (需自行创建) 存放API密钥等敏感信息
-│   └── config.yaml          # 核心配置文件 (模型结构, 超参数, 路径)
+│   ├── api_config.yaml      # (Create manually) Stores API keys and other sensitive information
+│   └── config.yaml          # Core configuration file (model architecture, hyperparameters, paths)
 ├── data/
-│   ├── unprocessed/         # 存放原始Yelp数据集
-│   └── processed/           # 存放所有预处理后的数据
+│   ├── unprocessed/         # Stores the raw Yelp dataset
+│   └── processed/           # Stores all preprocessed data
 ├── saved_models/
-│   ├── best_model.pt        # 训练好的最佳模型权重
-│   └── category_map.pkl     # 全局类别映射文件
+│   ├── best_model.pt        # Trained best model weights
+│   └── category_map.pkl     # Global category mapping file
 ├── scripts/
-│   └── generate_review_themes.py # 调用LLM API生成主题标签的脚本
+│   └── generate_review_themes.py # Script for calling LLM API to generate topic labels
 ├── src/
-│   ├── data_processing/     # 数据预处理脚本 (筛选, 分割, 聚合等)
+│   ├── data_processing/     # Data preprocessing scripts (filtering, splitting, aggregating, etc.)
 │   ├── model/
-│   │   ├── encoders.py      # UserEncoder 和 BusinessEncoder
-│   │   └── two_tower.py     # 双塔模型主体与交互层
+│   │   ├── encoders.py      # UserEncoder and BusinessEncoder
+│   │   └── two_tower.py     # Two-tower model body and interaction layer
 │   ├── training/
-│   │   └── trainer.py       # 通用训练器类
-│   ├── dataset.py           # PyTorch Dataset类，负责加载所有特征
-│   ├── train.py             # 主训练脚本
-│   └── evaluate.py          # 主评估脚本
-└── README.md                # 本文件
+│   │   └── trainer.py       # General-purpose trainer class
+│   ├── dataset.py           # PyTorch Dataset class, responsible for loading all features
+│   ├── train.py             # Main training script
+│   └── evaluate.py          # Main evaluation script
+└── README.md                # This file
 ```
